@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-from typing import Iterator, Dict, Any 
+from typing import Iterator, Dict, Any
 from .tokenizer import Tokenizer
 from .trie import Trie
 
@@ -36,4 +35,29 @@ class StringFinder:
         support for leftmost-longest matching (instead of reporting all matches), and support for lemmatization
         or similar linguistic variations.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        tokens = list(self.__tokenizer.tokens(buffer))
+        matches = []
+        for i, (token, (start, end)) in enumerate(tokens):
+            counter = 1 # keeps count of added tokens in trie walk
+            node = self.__trie.consume(token)
+            # if there is a node with the consumed token
+            while node:
+                # if the node is final, i.e. an output node
+                if node.is_final():
+                    matches.append({"match": token, "range": (start, end)})
+                # if the node is also a partial word, we can add the next token
+                # this serves as the transition function
+                if self.__trie.consume(token + ' '):
+                    added_token, (added_start, added_end) = tokens[i + counter]
+                    token = ' '.join([token, added_token])
+                    end = added_end # adjusts the range
+                    # if there is a node with the now extended token, the while loop continues
+                    node = self.__trie.consume(token)
+                    counter += 1
+                # if there's not a node with the consumed token, the while loop stops and we move to the next token
+                # this serves as the failure function
+                else:
+                    break
+        sorted_matches = sorted(matches, key=lambda x: x['range'][1])
+        yield from sorted_matches
+
