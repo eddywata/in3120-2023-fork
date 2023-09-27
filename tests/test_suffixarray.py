@@ -25,11 +25,14 @@ class TestSuffixArray(unittest.TestCase):
 
     def test_canonicalized_corpus(self):
         corpus = in3120.InMemoryCorpus()
-        corpus.add_document(in3120.InMemoryDocument(corpus.size(), {"a": "Japanese リンク"}))
+        corpus.add_document(in3120.InMemoryDocument(corpus.size(), {"a": "Japanese リンク"})) # TODO: reinstate
+        # corpus.add_document(in3120.InMemoryDocument(corpus.size(), {"a": "Japanese リンク hallo hallo åker åble faen"})) # TODO: remove
+        # corpus.add_document(in3120.InMemoryDocument(corpus.size(), {"a": "neida så det er ikke bare bare, men hallo"})) # TODO: remove
         corpus.add_document(in3120.InMemoryDocument(corpus.size(), {"a": "Cedilla \u0043\u0327 and \u00C7 foo"}))
         engine = in3120.SuffixArray(corpus, ["a"], self.__normalizer, self.__tokenizer)
-        self.__process_query_and_verify_winner(engine, "ﾘﾝｸ", [0], 1)  # Should match "リンク".
-        self.__process_query_and_verify_winner(engine, "\u00C7", [1], 2)  # Should match "\u0043\u0327".
+        # self.__process_query_and_verify_winner(engine, 'hallo', [0], 3) # TODO: remove
+        self.__process_query_and_verify_winner(engine, "ﾘﾝｸ", [0], 1)  # Should match "リンク". # TODO: reinstate
+        self.__process_query_and_verify_winner(engine, "\u00C7", [1], 2)  # Should match "\u0043\u0327". # TODO: reinstate
 
     def test_cran_corpus(self):
         corpus = in3120.InMemoryCorpus("../data/cran.xml")
