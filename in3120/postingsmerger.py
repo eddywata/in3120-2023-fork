@@ -67,32 +67,31 @@ class PostingsMerger:
         The posting lists are assumed sorted in increasing order according
         to the document identifiers.
         """
-        posting_1 = next(p1, None)
-        posting_2 = next(p2, None)
-        prev_posting = None
-        while posting_1 or posting_2:
-            # if posting_2 is the smallest or only posting
-            if posting_1 is None or (posting_2 and posting_2.document_id < posting_1.document_id):
-                # check if the posting was yielded in the previous iteration
-                if posting_2 != prev_posting:
-                    yield posting_2
-                    prev_posting = posting_2
-                # advance posting_2
-                posting_2 = next(p2, None)
-            # if posting_1 is the smallest or only posting
-            elif posting_2 is None or posting_1.document_id < posting_2.document_id:
-                # check if the posting was yielded in the previous iteration
-                if posting_1 != prev_posting:
-                    yield posting_1
-                    prev_posting = posting_1
-                # advance posting_1
-                posting_1 = next(p1, None)
-            # if the postings' docIDs are the same
+        # SOLUTION CODE
+        # Start at the head.
+        current1 = next(p1, None)
+        current2 = next(p2, None)
+
+        # We're doing an OR. First handle the case where neither posting
+        # list is exhausted.
+        while current1 and current2:
+
+            # Yield the smallest one.
+            if current1.document_id == current2.document_id:
+                yield current1
+                current1 = next(p1, None)
+                current2 = next(p2, None)
+            elif current1.document_id < current2.document_id:
+                yield current1
+                current1 = next(p1, None)
             else:
-                # check if posting_1 was yielded in the previous iteration
-                if posting_1 != prev_posting:
-                    yield posting_1
-                    prev_posting = posting_1
-                # advance both postings
-                posting_1 = next(p1, None)
-                posting_2 = next(p2, None)
+                yield current2
+                current2 = next(p2, None)
+
+        # At least one of the lists are exhausted. Yield the remaining tail(s), if any.
+        if current1:
+            yield current1
+            yield from p1
+        if current2:
+            yield current2
+            yield from p2
