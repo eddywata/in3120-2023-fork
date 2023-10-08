@@ -65,11 +65,18 @@ class SimpleSearchEngine:
         all_cursors = [[next(posting, None), term] for posting, term in postings_lists]
         # remove potential empty postings lists
         all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]
+
         while all_cursors and len([cursor for cursor, _ in all_cursors if cursor is not None]) >= n:
             min_doc_id = min([cursor[0].document_id for cursor in all_cursors])
             ranker.reset(min_doc_id)
             # the non-exhausted postings lists that mention the lowest document ID
             frontier = [i for i, cursor in enumerate(all_cursors) if cursor is not None and cursor[0].document_id == min_doc_id]
+
+            if min_doc_id == 16980:
+                print(all_cursors)
+                print(query)
+
+            last_term_ranked = None
 
             if len(frontier) >= n:
                 cursor_to_be_ranked = [[cursor, term] for cursor, term in (all_cursors[i] for i in frontier)]
@@ -78,17 +85,26 @@ class SimpleSearchEngine:
                     term = item[1]
                     multiplicity = query_counter[term]
                     ranker.update(term, multiplicity, posting)
+                    last_term_ranked = term
 
                 sieve.sift(ranker.evaluate(), min_doc_id)
 
             # update the frontier
             for i in frontier:
+                if postings_lists[i][1] == 'ist':
+                    print('last term ranked: ', last_term_ranked, ' i: ',i)
+                    print('before: ', all_cursors)
+                    print('trying to next this one: ', all_cursors[i])
                 if postings_lists[i][1] == all_cursors[i][1]:
                     next_posting = next(postings_lists[i][0], None)
                 # resolves mismatch between postings lists and cursors as postings lists are exhausted
-                else:
+                else: #TODO: this ofc didn't work
                     next_posting = next(postings_lists[i+1][0], None)
                 all_cursors[i][0] = next_posting
+                if postings_lists[i][1] == 'ist':
+                    print('after: ', all_cursors)
+                    print('did we next it?: ', all_cursors[i])
+                    print()
 
             # remove potential exhausted postings lists
             all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]

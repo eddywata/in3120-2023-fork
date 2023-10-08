@@ -3,6 +3,7 @@
 
 from typing import Iterator, Tuple
 from .tokenizer import Tokenizer
+import re
 
 
 class ShingleGenerator(Tokenizer):
@@ -25,4 +26,10 @@ class ShingleGenerator(Tokenizer):
         """
         Locates where the shingles begin and end.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        for i in range(len(buffer)):
+            if len(buffer) < self.__width:
+                yield i, len(buffer)
+                break
+            yield i, i + self.__width
+            if i >= len(buffer) - self.__width:
+                break
