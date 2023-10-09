@@ -4,7 +4,7 @@
 from collections import Counter
 from typing import Iterator, Dict, Any
 from .sieve import Sieve
-from .ranker import SimpleRanker
+from .ranker import Ranker, SimpleRanker
 from .corpus import Corpus
 from .invertedindex import InvertedIndex
 
@@ -32,7 +32,7 @@ class SimpleSearchEngine:
         self.__corpus = corpus
         self.__inverted_index = inverted_index
 
-    def evaluate(self, query: str, options: dict, ranker: SimpleRanker) -> Iterator[Dict[str, Any]]:
+    def evaluate(self, query: str, options: dict, ranker: Ranker) -> Iterator[Dict[str, Any]]:
         """
         Evaluates the given query, doing N-out-of-M ranked retrieval. I.e., for a supplied query having M
         unique terms, a document is considered to be a match if it contains at least N <= M of those terms.
@@ -45,68 +45,58 @@ class SimpleSearchEngine:
         to return to the client is controlled via the "hit_count" (int) option.
         """
         inverted_index = self.__inverted_index
+        # turning query into list
         query = list(inverted_index.get_terms(query))
+        # counting query terms for multiplicity
         query_counter = Counter(query)
+        # keeping only unique terms from query
         query = list(dict.fromkeys(query))
 
         m = len(query)
         n = max(1, min(m, int(options['match_threshold'] * m)))
 
         # collect posting lists for each term in query
-        postings_lists = []
+        posting_lists = []
         for term in query:
-            postings = inverted_index.get_postings_iterator(term)
-            postings_lists.append([postings, term])  # the term is also kept, for the ranker
+            posting_list = inverted_index.get_postings_iterator(term)
+            posting_lists.append([posting_list, term])  # the term is also kept, for later reference
 
         sieve = Sieve(options['hit_count'])
         ranker = SimpleRanker()
 
-        # initial postings for all terms in query, will function as cursors throughout iteration
-        all_cursors = [[next(posting, None), term] for posting, term in postings_lists]
-        # remove potential empty postings lists
+        # initial postings for all terms in query, will function as cursors throughout search
+        all_cursors = [[next(posting_list, None), term] for posting_list, term in posting_lists]
+        # remove potential empty posting lists
         all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]
-
+        # keep going as long as there are at least n posting lists
         while all_cursors and len([cursor for cursor, _ in all_cursors if cursor is not None]) >= n:
             min_doc_id = min([cursor[0].document_id for cursor in all_cursors])
             ranker.reset(min_doc_id)
-            # the non-exhausted postings lists that mention the lowest document ID
+            # the non-exhausted posting lists that point to the lowest document ID
             frontier = [i for i, cursor in enumerate(all_cursors) if cursor is not None and cursor[0].document_id == min_doc_id]
-
-            if min_doc_id == 16980:
-                print(all_cursors)
-                print(query)
-
-            last_term_ranked = None
-
+            # check if the frontier satisfies the n of m criterion
             if len(frontier) >= n:
-                cursor_to_be_ranked = [[cursor, term] for cursor, term in (all_cursors[i] for i in frontier)]
-                for item in cursor_to_be_ranked:
-                    posting = item[0]
-                    term = item[1]
+                cursors_to_be_ranked = [[cursor, term] for cursor, term in (all_cursors[i] for i in frontier)]
+                for cursor in cursors_to_be_ranked:
+                    posting = cursor[0]
+                    term = cursor[1]
                     multiplicity = query_counter[term]
                     ranker.update(term, multiplicity, posting)
-                    last_term_ranked = term
 
                 sieve.sift(ranker.evaluate(), min_doc_id)
 
             # update the frontier
             for i in frontier:
-                if postings_lists[i][1] == 'ist':
-                    print('last term ranked: ', last_term_ranked, ' i: ',i)
-                    print('before: ', all_cursors)
-                    print('trying to next this one: ', all_cursors[i])
-                if postings_lists[i][1] == all_cursors[i][1]:
-                    next_posting = next(postings_lists[i][0], None)
-                # resolves mismatch between postings lists and cursors as postings lists are exhausted
-                else: #TODO: this ofc didn't work
-                    next_posting = next(postings_lists[i+1][0], None)
+                term = all_cursors[i][1]
+                posting_list = None
+                # ensures matching generator is advanced, since all_cursors becomes shorter than posting_lists
+                for pl in posting_lists:
+                    if pl[1] == term:
+                        posting_list = pl[0]
+                next_posting = next(posting_list, None)
                 all_cursors[i][0] = next_posting
-                if postings_lists[i][1] == 'ist':
-                    print('after: ', all_cursors)
-                    print('did we next it?: ', all_cursors[i])
-                    print()
 
-            # remove potential exhausted postings lists
+            # remove potential exhausted posting lists
             all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]
 
         top_results = sieve.winners()
