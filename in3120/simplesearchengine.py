@@ -62,7 +62,6 @@ class SimpleSearchEngine:
             posting_lists.append([posting_list, term])  # the term is also kept, for later reference
 
         sieve = Sieve(options['hit_count'])
-        ranker = SimpleRanker()
 
         # initial postings for all terms in query, will function as cursors throughout search
         all_cursors = [[next(posting_list, None), term] for posting_list, term in posting_lists]
