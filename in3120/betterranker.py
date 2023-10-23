@@ -43,12 +43,12 @@ class BetterRanker(Ranker):
         idf = math.log(n / df, 10)
         tf_idf = tf * idf
 
-        static_rank_score = self._corpus.get_document(self._document_id).get_field(
+        static_quality_score = self._corpus.get_document(self._document_id).get_field(
             self._static_score_field_name, 0.0
         )
 
         self._score += (multiplicity * tf_idf +
-                        (static_rank_score *
+                        (static_quality_score *
                          self._static_score_weight *
                          self._dynamic_score_weight))
 
