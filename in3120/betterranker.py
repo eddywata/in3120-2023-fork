@@ -25,23 +25,15 @@ class BetterRanker(Ranker):
         self._document_id = None
         self._corpus = corpus
         self._inverted_index = inverted_index
-        self._dynamic_score_weight = 0.0
-        self._static_score_weight = 0.0
+        self._dynamic_score_weight = 1.0
+        self._static_score_weight = 1.0
         self._static_score_field_name = "static_quality_score"
 
     def reset(self, document_id: int) -> None:
         self._document_id = document_id
         self._score = 0.0
-        try:
-            self._static_score_weight = self._corpus.get_document(
-                self._document_id).get_field(
-                self._static_score_field_name, 0.0)
-        # test_document_id_mismatch arbitrarily picks a docID that is bigger than the corpus,
-        # and so when we try to retrieve a static_quality_score we get an AssertionError
-        except AssertionError:
-            self._static_score_weight = 0.0
-        self._dynamic_score_weight = 0.0
-        self._score += self._static_score_weight
+        self._dynamic_score_weight = 1.0
+        self._static_score_weight = 1.0
 
     def update(self, term: str, multiplicity: int, posting: Posting) -> None:
         assert self._document_id == posting.document_id
@@ -50,8 +42,15 @@ class BetterRanker(Ranker):
         n = self._corpus.size()
         idf = math.log(n / df, 10)
         tf_idf = tf * idf
-        self._dynamic_score_weight += multiplicity * tf_idf
-        self._score += self._dynamic_score_weight
+
+        static_rank_score = self._corpus.get_document(self._document_id).get_field(
+            self._static_score_field_name, 0.0
+        )
+
+        self._score += (multiplicity * tf_idf +
+                        (static_rank_score *
+                         self._static_score_weight *
+                         self._dynamic_score_weight))
 
     def evaluate(self) -> float:
         return self._score
