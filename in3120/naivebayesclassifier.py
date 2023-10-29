@@ -6,6 +6,8 @@ from .dictionary import InMemoryDictionary
 from .normalizer import Normalizer
 from .tokenizer import Tokenizer
 from .corpus import Corpus
+import itertools
+from collections import Counter
 
 
 class NaiveBayesClassifier:
@@ -44,21 +46,40 @@ class NaiveBayesClassifier:
         """
         Estimates all prior probabilities needed for the naive Bayes classifier.
         """
-        total_documents_size = sum(corpus.size() for corpus in training_set.values())
-        for category, docs in training_set.items():
-            self.__priors[category] = docs.size() / total_documents_size
+        total_docs_size = sum(corpus.size() for corpus in training_set.values())
+        for category, corpus in training_set.items():
+            self.__priors[category] = corpus.size() / total_docs_size
 
     def __compute_vocabulary(self, training_set, fields):
         """
         Builds up the overall vocabulary as seen in the training set.
         """
-        ...
+        for _, corpus in training_set.items():
+            for doc in corpus:
+                terms = itertools.chain.from_iterable(self.__get_terms(doc.get_field(f, "")) for f in fields)
+                for term in terms:
+                    self.__vocabulary.add_if_absent(term)
 
     def __compute_posteriors(self, training_set, fields):
         """
         Estimates all conditional probabilities needed for the naive Bayes classifier.
         """
-        ...
+        for category, corpus in training_set.items():
+            term_frequencies = Counter()
+            for doc in corpus:
+                terms = itertools.chain.from_iterable(self.__get_terms(doc.get_field(f, "")) for f in fields)
+                term_frequencies.update(terms)
+            # length of category text plus length of vocabulary is added as denominator
+            self.__denominators[category] = sum(term_frequencies.values()) + len(self.__vocabulary)
+
+            for term, freq in term_frequencies.items():
+                # TODO: rm print
+                # print(f'P({term}|{category}) = {freq}+1/{sum(term_frequencies.values())}+{len(self.__vocabulary)}')
+                # conditional probabilities are calculated by term frequency within category plus Laplace smoothing,
+                # divided by the denominator
+                self.__conditionals[category] = {term: float()}
+                self.__conditionals[category][term] = ((freq + 1) / (self.__denominators[category]))
+                print(self.__conditionals[category][term])
 
     def __get_terms(self, buffer):
         """
