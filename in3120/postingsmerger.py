@@ -3,7 +3,7 @@
 
 from typing import Iterator
 from .posting import Posting
-import heapq
+
 
 class PostingsMerger:
     """
@@ -25,49 +25,35 @@ class PostingsMerger:
         The posting lists are assumed sorted in increasing order according
         to the document identifiers.
         """
-        posting_1 = next(p1, None)
-        posting_2 = next(p2, None)
-        while posting_1 and posting_2:
-            if posting_1.document_id == posting_2.document_id:
-                yield posting_1
-                posting_1 = next(p1, None)
-                posting_2 = next(p2, None)
-            elif posting_1.document_id < posting_2.document_id:
-                posting_1 = next(p1, None)
-            else:
-                posting_2 = next(p2, None)
 
-    @staticmethod
-    def set_difference(p1: Iterator[Posting], p2: Iterator[Posting]) -> Iterator[Posting]:
-        """
-        A generator that yields an AND NOT of two posting lists, given iterators over these.
-        The posting lists are assumed sorted in increasing order according to the document identifiers.
-        """
-        posting_1 = next(p1, None)
-        posting_2 = next(p2, None)
-        while posting_1 and posting_2:
-            if posting_1.document_id < posting_2.document_id:
-                yield posting_1
-                posting_1 = next(p1, None)
-            elif posting_1.document_id > posting_2.document_id:
-                posting_2 = next(p2, None)
+        # Start at the head.
+        current1 = next(p1, None)
+        current2 = next(p2, None)
+
+        # We're doing an AND, so we can abort as soon as we exhaust one of
+        # the posting lists.
+        while current1 and current2:
+
+            # Increment the smallest one. Yield if we have a match.
+            if current1.document_id == current2.document_id:
+                yield current1
+                current1 = next(p1, None)
+                current2 = next(p2, None)
+            elif current1.document_id < current2.document_id:
+                current1 = next(p1, None)
             else:
-                posting_1 = next(p1, None)
-                posting_2 = next(p2, None)
-        while posting_1:
-            yield posting_1
-            posting_1 = next(p1, None)
+                current2 = next(p2, None)
 
     @staticmethod
     def union(p1: Iterator[Posting], p2: Iterator[Posting]) -> Iterator[Posting]:
         """
-        A generator that yields a simple OR of two posting lists, givenS
+        A generator that yields a simple OR of two posting lists, given
         iterators over these.
 
         The posting lists are assumed sorted in increasing order according
         to the document identifiers.
         """
-        # SOLUTION CODE
+
         # Start at the head.
         current1 = next(p1, None)
         current2 = next(p2, None)

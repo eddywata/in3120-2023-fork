@@ -4,7 +4,7 @@
 from collections import Counter
 from typing import Iterator, Dict, Any
 from .sieve import Sieve
-from .ranker import Ranker, SimpleRanker
+from .ranker import Ranker
 from .corpus import Corpus
 from .invertedindex import InvertedIndex
 
@@ -17,7 +17,7 @@ class SimpleSearchEngine:
     logically equivalent to the following predicate:
 
        (orange AND apple) OR (orange AND banana) OR (apple AND banana)
-       
+
     Note that N-of-M matching can be viewed as a type of "soft AND" evaluation, where the degree of match
     can be smoothly controlled to mimic either an OR evaluation (1-of-M), or an AND evaluation (M-of-M),
     or something in between.
@@ -44,63 +44,69 @@ class SimpleSearchEngine:
         N is inferred from the query via the "match_threshold" (float) option, and the maximum number of documents
         to return to the client is controlled via the "hit_count" (int) option.
         """
-        inverted_index = self.__inverted_index
-        # turning query into list
-        query = list(inverted_index.get_terms(query))
-        # counting query terms for multiplicity
-        query_counter = Counter(query)
-        # keeping only unique terms from query
-        query = list(dict.fromkeys(query))
+        # Print verbose debug information?
+        debug = options.get("debug", False)
 
-        m = len(query)
-        n = max(1, min(m, int(options['match_threshold'] * m)))
+        # Produce the query terms. We must use the same string processing here as we used when
+        # building up the inverted index. Some terms might be duplicated (e.g., as in the query
+        # "to be or not to be").
+        query_terms = self.__inverted_index.get_terms(query)
+        unique_query_terms = list(Counter(query_terms).items())
 
-        # collect posting lists for each term in query
-        posting_lists = []
-        for term in query:
-            posting_list = inverted_index.get_postings_iterator(term)
-            posting_lists.append([posting_list, term])  # the term is also kept, for later reference
+        # Get the posting lists for the unique query terms.
+        posting_lists = [self.__inverted_index[term] for (term, _) in unique_query_terms]
 
-        sieve = Sieve(options['hit_count'])
+        # We require that at least N of the M query terms are present in the document,
+        # for the document to be considered part of the result set. What should the minimum
+        # value of N be?
+        # TODO: Take multiplicity into account, and not just uniqueness.
+        match_threshold = max(0.0, min(1.0, options.get("match_threshold", 0.5)))
+        required_minimum = max(1, min(len(unique_query_terms), int(match_threshold * len(unique_query_terms))))
 
-        # initial postings for all terms in query, will function as cursors throughout search
-        all_cursors = [[next(posting_list, None), term] for posting_list, term in posting_lists]
-        # remove potential empty posting lists
-        all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]
-        # keep going as long as there are at least n posting lists
-        while all_cursors and len([cursor for cursor, _ in all_cursors if cursor is not None]) >= n:
-            min_doc_id = min([cursor[0].document_id for cursor in all_cursors])
-            ranker.reset(min_doc_id)
-            # the non-exhausted posting lists that point to the lowest document ID
-            frontier = [i for i, cursor in enumerate(all_cursors) if cursor is not None and cursor[0].document_id == min_doc_id]
-            # check if the frontier satisfies the n of m criterion
-            if len(frontier) >= n:
-                cursors_to_be_ranked = [[cursor, term] for cursor, term in (all_cursors[i] for i in frontier)]
-                for cursor in cursors_to_be_ranked:
-                    posting = cursor[0]
-                    term = cursor[1]
-                    multiplicity = query_counter[term]
-                    ranker.update(term, multiplicity, posting)
+        # When traversing the posting lists using document-at-a-time traversal, we need to keep track
+        # of where we are in each of the posting lists. Initially, all the cursors "point to" the first entry
+        # in each posting list. Keep track of which posting lists that remain to be fully traversed.
+        all_cursors = [next(p, None) for p in posting_lists]
+        remaining_cursor_ids = [i for i in range(len(all_cursors)) if all_cursors[i]]
 
-                sieve.sift(ranker.evaluate(), min_doc_id)
+        # We're doing ranked retrieval. Assess relevance scores per document as we go along, as we're doing
+        # document-at-a-time traversal. Keep track of the K highest-scoring documents.
+        sieve = Sieve(max(1, min(100, options.get("hit_count", 10))))
 
-            # update the frontier
-            for i in frontier:
-                term = all_cursors[i][1]
-                posting_list = None
-                # ensures matching generator is advanced, since all_cursors becomes shorter than posting_lists
-                for pl in posting_lists:
-                    if pl[1] == term:
-                        posting_list = pl[0]
-                next_posting = next(posting_list, None)
-                all_cursors[i][0] = next_posting
+        # We're doing at least N-of-M matching. As we reach the end of the posting lists, we can abort when
+        # the number of non-exhausted lists drops below the required minimum N.
+        while len(remaining_cursor_ids) >= required_minimum:
 
-            # remove potential exhausted posting lists
-            all_cursors = [cursor for cursor in all_cursors if cursor[0] is not None]
+            # The posting lists are sorted by the document identifiers in ascending order. Define the
+            # "frontier" as the subset of non-exhausted posting lists that mention the lowest document
+            # identifier. In a sense, if we imagine scanning the posting lists from left to right, the
+            # frontier is the subset that has the "leftmost" cursors.
+            # TODO: This can easily be done in a single pass over the remaining lists.
+            document_id = min(all_cursors[i].document_id for i in remaining_cursor_ids)
+            frontier_cursor_ids = [i for i in remaining_cursor_ids if all_cursors[i].document_id == document_id]
 
-        top_results = sieve.winners()
+            # The number of elements on the "frontier" needs to be at least N. Otherwise, these documents
+            # don't contain enough of the query terms, and aren't part of the result set.
+            if len(frontier_cursor_ids) >= required_minimum:
+                ranker.reset(document_id)
+                for i in frontier_cursor_ids:
+                    ranker.update(unique_query_terms[i][0], unique_query_terms[i][1], all_cursors[i])
+                score = ranker.evaluate()
+                sieve.sift(score, document_id)
+                if debug:
+                    print("*** MATCH")
+                    print("document =", self.__corpus[document_id])
+                    print("matches  =", {unique_query_terms[i][0]: all_cursors[i] for i in frontier_cursor_ids})
+                    print("score    =", score)
 
-        for score, doc_id in top_results:
-            document = self.__corpus.get_document(doc_id)
-            yield {'score': score, 'document': document}
+            # Move along the cursors on the frontier. The cursors not on the frontier remain where they
+            # are. We may or may not reach the end of some posting lists when we advance, so the set of
+            # remaining non-exhausted lists might shrink.
+            for i in frontier_cursor_ids:
+                all_cursors[i] = next(posting_lists[i], None)
+            remaining_cursor_ids = [i for i in range(len(all_cursors)) if all_cursors[i]]
 
+        # Alert the client about the best-matching documents, using the supplied callback function.
+        # Emit documents sorted according to their relevancy scores.
+        for (score, document_id) in sieve.winners():
+            yield {"score": score, "document": self.__corpus[document_id]}
