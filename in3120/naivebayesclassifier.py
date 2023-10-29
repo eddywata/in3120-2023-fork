@@ -44,19 +44,21 @@ class NaiveBayesClassifier:
         """
         Estimates all prior probabilities needed for the naive Bayes classifier.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        total_documents_size = sum(corpus.size() for corpus in training_set.values())
+        for category, docs in training_set.items():
+            self.__priors[category] = docs.size() / total_documents_size
 
     def __compute_vocabulary(self, training_set, fields):
         """
         Builds up the overall vocabulary as seen in the training set.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        ...
 
     def __compute_posteriors(self, training_set, fields):
         """
         Estimates all conditional probabilities needed for the naive Bayes classifier.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        ...
 
     def __get_terms(self, buffer):
         """
@@ -64,7 +66,8 @@ class NaiveBayesClassifier:
         terms as they appear. Both the documents in the training set and the buffers
         we classify need to be identically processed.
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        tokens = self.__tokenizer.strings(self.__normalizer.canonicalize(buffer))
+        return (self.__normalizer.normalize(t) for t in tokens)
 
     def classify(self, buffer: str) -> Iterator[Dict[str, Any]]:
         """
@@ -75,4 +78,4 @@ class NaiveBayesClassifier:
         The results yielded back to the client are dictionaries having the keys "score" (float) and
         "category" (str).
         """
-        raise NotImplementedError("You need to implement this as part of the assignment.")
+        ...
