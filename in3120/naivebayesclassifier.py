@@ -8,6 +8,7 @@ from .tokenizer import Tokenizer
 from .corpus import Corpus
 import itertools
 from collections import Counter
+from math import log
 
 
 class NaiveBayesClassifier:
@@ -72,14 +73,13 @@ class NaiveBayesClassifier:
             # length of category text plus length of vocabulary is added as denominator
             self.__denominators[category] = sum(term_frequencies.values()) + len(self.__vocabulary)
 
+            if category not in self.__conditionals:
+                self.__conditionals[category] = {}
+
             for term, freq in term_frequencies.items():
-                # TODO: rm print
-                # print(f'P({term}|{category}) = {freq}+1/{sum(term_frequencies.values())}+{len(self.__vocabulary)}')
                 # conditional probabilities are calculated by term frequency within category plus Laplace smoothing,
                 # divided by the denominator
-                self.__conditionals[category] = {term: float()}
                 self.__conditionals[category][term] = ((freq + 1) / (self.__denominators[category]))
-                print(self.__conditionals[category][term])
 
     def __get_terms(self, buffer):
         """
@@ -99,4 +99,16 @@ class NaiveBayesClassifier:
         The results yielded back to the client are dictionaries having the keys "score" (float) and
         "category" (str).
         """
-        ...
+        scores = []
+        for category in self.__conditionals.keys():
+            terms = self.__get_terms(buffer)
+            prior = self.__priors[category]
+            conditionals = []
+            for term in terms:
+                if term not in self.__conditionals[category]:
+                    self.__conditionals[category][term] = ((0 + 1) / (self.__denominators[category]))
+                conditionals.append(self.__conditionals[category][term])
+            # category probability is the sum of log probabilities
+            score = log(prior) + sum([log(conditional) for conditional in conditionals])
+            scores.append({'score': score, 'category': category})
+        yield from sorted(scores, key=lambda x: x['score'], reverse=True)
